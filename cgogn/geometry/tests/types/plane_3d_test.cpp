@@ -40,9 +40,9 @@ TYPED_TEST_CASE(Plane3D_TEST, VecTypes );
 
 TEST(Plane3D_TEST, NameOfType)
 {
-	EXPECT_EQ(cgogn::name_of_type(cgogn::geometry::Plane3D<StdArrayf>(StdArrayf(),0)), "cgogn::geometry::Plane3D<cgogn::geometry::Vec_T<std::array<float,3>>>");
+	EXPECT_EQ(cgogn::name_of_type(cgogn::geometry::Plane3D<StdArrayf>(StdArrayf(),0)), "cgogn::geometry::Plane3D<cgogn::geometry::Vec_T<std::array<float32,3>>>");
 	EXPECT_EQ(cgogn::name_of_type(cgogn::geometry::Plane3D<EigenVec3f>(EigenVec3f(),0)), "cgogn::geometry::Plane3D<Eigen::Matrix<float,3,1,0,3,1>>");
-	EXPECT_EQ(cgogn::name_of_type(cgogn::geometry::Plane3D<StdArrayd>(StdArrayd(),0)), "cgogn::geometry::Plane3D<cgogn::geometry::Vec_T<std::array<double,3>>>");
+	EXPECT_EQ(cgogn::name_of_type(cgogn::geometry::Plane3D<StdArrayd>(StdArrayd(),0)), "cgogn::geometry::Plane3D<cgogn::geometry::Vec_T<std::array<float64,3>>>");
 	EXPECT_EQ(cgogn::name_of_type(cgogn::geometry::Plane3D<EigenVec3d>(EigenVec3d(),0)), "cgogn::geometry::Plane3D<Eigen::Matrix<double,3,1,0,3,1>>");
 }
 

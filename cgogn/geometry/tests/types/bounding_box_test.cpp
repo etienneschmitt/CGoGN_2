@@ -44,9 +44,9 @@ TYPED_TEST_CASE(BoundingBox_TEST, VecTypes );
 
 TEST(BoundingBox_TEST, NameOfType)
 {
-	EXPECT_EQ(cgogn::name_of_type(cgogn::geometry::BoundingBox<StdArrayf>()), "cgogn::geometry::BoundingBox<cgogn::geometry::Vec_T<std::array<float,3>>>");
+	EXPECT_EQ(cgogn::name_of_type(cgogn::geometry::BoundingBox<StdArrayf>()), "cgogn::geometry::BoundingBox<cgogn::geometry::Vec_T<std::array<float32,3>>>");
 	EXPECT_EQ(cgogn::name_of_type(cgogn::geometry::BoundingBox<EigenVec3f>()), "cgogn::geometry::BoundingBox<Eigen::Matrix<float,3,1,0,3,1>>");
-	EXPECT_EQ(cgogn::name_of_type(cgogn::geometry::BoundingBox<StdArrayd>()), "cgogn::geometry::BoundingBox<cgogn::geometry::Vec_T<std::array<double,3>>>");
+	EXPECT_EQ(cgogn::name_of_type(cgogn::geometry::BoundingBox<StdArrayd>()), "cgogn::geometry::BoundingBox<cgogn::geometry::Vec_T<std::array<float64,3>>>");
 	EXPECT_EQ(cgogn::name_of_type(cgogn::geometry::BoundingBox<EigenVec3d>()), "cgogn::geometry::BoundingBox<Eigen::Matrix<double,3,1,0,3,1>>");
 }
 

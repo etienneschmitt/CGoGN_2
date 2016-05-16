@@ -42,9 +42,9 @@ TYPED_TEST_CASE(VEC_OP_TEST, VecTypes );
 
 TEST(VEC_OP_TEST, CGOGN_Typename)
 {
-	EXPECT_EQ(cgogn::name_of_type(StdArrayf()),"cgogn::geometry::Vec_T<std::array<float,3>>");
+	EXPECT_EQ(cgogn::name_of_type(StdArrayf()),"cgogn::geometry::Vec_T<std::array<float32,3>>");
 	EXPECT_EQ(cgogn::name_of_type(EigenVec3f()), "Eigen::Matrix<float,3,1,0,3,1>");
-	EXPECT_EQ(cgogn::name_of_type(StdArrayd()),"cgogn::geometry::Vec_T<std::array<double,3>>");
+	EXPECT_EQ(cgogn::name_of_type(StdArrayd()),"cgogn::geometry::Vec_T<std::array<float64,3>>");
 	EXPECT_EQ(cgogn::name_of_type(EigenVec3d()), "Eigen::Matrix<double,3,1,0,3,1>");
 }
 
