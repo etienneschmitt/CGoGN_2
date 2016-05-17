@@ -1,0 +1,315 @@
+/*******************************************************************************
+* CGoGN: Combinatorial and Geometric modeling with Generic N-dimensional Maps  *
+* Copyright (C) 2015, IGG Group, ICube, University of Strasbourg, France       *
+*                                                                              *
+* This library is free software; you can redistribute it and/or modify it      *
+* under the terms of the GNU Lesser General Public License as published by the *
+* Free Software Foundation; either version 2.1 of the License, or (at your     *
+* option) any later version.                                                   *
+*                                                                              *
+* This library is distributed in the hope that it will be useful, but WITHOUT  *
+* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or        *
+* FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License  *
+* for more details.                                                            *
+*                                                                              *
+* You should have received a copy of the GNU Lesser General Public License     *
+* along with this library; if not, write to the Free Software Foundation,      *
+* Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA.           *
+*                                                                              *
+* Web site: http://cgogn.unistra.fr/                                           *
+* Contact information: cgogn@unistra.fr                                        *
+*                                                                              *
+*******************************************************************************/
+
+#include <QApplication>
+#include <QMatrix4x4>
+
+#include <qoglviewer.h>
+#include <QKeyEvent>
+
+#include <cgogn/core/utils/logger.h>
+#include <cgogn/core/cmap/cmap3.h>
+#include <cgogn/io/map_import.h>
+#include <cgogn/geometry/algos/bounding_box.h>
+#include <cgogn/rendering/shaders/vbo.h>
+#include <cgogn/rendering/map_render.h>
+#include <cgogn/rendering/drawer.h>
+#include <cgogn/rendering/volume_drawer.h>
+#include <cgogn/rendering/topo_drawer.h>
+#include <cgogn/geometry/algos/picking.h>
+
+
+
+#define DEFAULT_MESH_PATH CGOGN_STR(CGOGN_TEST_MESHES_PATH)
+
+using namespace cgogn::numerics;
+using Map3 = cgogn::CMap3<cgogn::DefaultMapTraits>;
+using Vec3 = Eigen::Vector3d;
+//using Vec3 = cgogn::geometry::Vec_T<std::array<float64,3>>;
+
+template<typename T>
+using VertexAttribute = Map3::VertexAttribute<T>;
+
+
+class Viewer : public QOGLViewer
+{
+public:
+	using TopoDrawer = cgogn::rendering::TopoDrawer;
+	using VolumeDrawer = cgogn::rendering::VolumeDrawer;
+	using DisplayListDrawer = cgogn::rendering::DisplayListDrawer;
+
+	Viewer();
+	CGOGN_NOT_COPYABLE_NOR_MOVABLE(Viewer);
+
+	virtual void draw();
+	virtual void init();
+	virtual void keyPressEvent(QKeyEvent*);
+	virtual void mousePressEvent(QMouseEvent*);
+
+	void import(const std::string& volumeMesh);
+	virtual ~Viewer();
+	virtual void closeEvent(QCloseEvent *e);
+
+private:
+	void rayClick(QMouseEvent* event, qoglviewer::Vec& P, qoglviewer::Vec& Q);
+
+	Map3 map_;
+	VertexAttribute<Vec3> vertex_position_;
+
+	cgogn::geometry::BoundingBox<Vec3> bb_;
+
+	std::unique_ptr<cgogn::rendering::VBO> vbo_pos_;
+
+	std::unique_ptr<TopoDrawer> topo_drawer_;
+	std::unique_ptr<TopoDrawer::Renderer> topo_drawer_rend_;
+
+	std::unique_ptr<VolumeDrawer> volume_drawer_;
+	std::unique_ptr<VolumeDrawer::Renderer> volume_drawer_rend_;
+
+	std::unique_ptr<DisplayListDrawer> drawer_;
+	std::unique_ptr<DisplayListDrawer::Renderer> drawer_rend_;
+
+	bool vol_rendering_;
+	bool edge_rendering_;
+	bool topo_drawering_;
+
+	float32 expl_;
+
+};
+
+
+//
+// IMPLEMENTATION
+//
+void Viewer::rayClick(QMouseEvent* event, qoglviewer::Vec& P, qoglviewer::Vec& Q)
+{
+	P = camera()->unprojectedCoordinatesOf(qoglviewer::Vec(event->x(), event->y(), 0.0));
+	Q = camera()->unprojectedCoordinatesOf(qoglviewer::Vec(event->x(), event->y(), 1.0));
+}
+
+
+void Viewer::import(const std::string& volumeMesh)
+{
+	cgogn::io::import_volume<Vec3>(map_, volumeMesh);
+
+	vertex_position_ = map_.get_attribute<Vec3, Map3::Vertex::ORBIT>("position");
+	if (!vertex_position_.is_valid())
+	{
+		cgogn_log_error("Viewer::import") << "Missing attribute position. Aborting.";
+		std::exit(EXIT_FAILURE);
+	}
+
+	cgogn::geometry::compute_bounding_box(vertex_position_, bb_);
+
+	setSceneRadius(bb_.diag_size()/2.0);
+	Vec3 center = bb_.center();
+	setSceneCenter(qoglviewer::Vec(center[0], center[1], center[2]));
+	showEntireScene();
+
+	map_.check_map_integrity();
+}
+
+Viewer::~Viewer()
+{}
+
+void Viewer::closeEvent(QCloseEvent*)
+{
+	vbo_pos_.reset();
+	topo_drawer_.reset();
+	topo_drawer_rend_.reset();
+	volume_drawer_.reset();
+	volume_drawer_rend_.reset();
+	drawer_.reset();
+	drawer_rend_.reset();
+}
+
+Viewer::Viewer() :
+	map_(),
+	vertex_position_(),
+	bb_(),
+	vbo_pos_(nullptr),
+	topo_drawer_(nullptr),
+	topo_drawer_rend_(nullptr),
+	volume_drawer_(nullptr),
+	volume_drawer_rend_(nullptr),
+	drawer_(nullptr),
+	drawer_rend_(nullptr),
+	vol_rendering_(true),
+	edge_rendering_(true),
+	topo_drawering_(true),
+	expl_(0.8f)
+{}
+
+void Viewer::keyPressEvent(QKeyEvent *ev)
+{
+	switch (ev->key()) {
+		case Qt::Key_V:
+			vol_rendering_ = !vol_rendering_;
+			break;
+		case Qt::Key_E:
+			edge_rendering_ = !edge_rendering_;
+			break;
+
+		case Qt::Key_T:
+			topo_drawering_ = !topo_drawering_;
+			break;
+		case Qt::Key_Plus:
+			expl_ += 0.05f;
+			volume_drawer_rend_->set_explode_volume(expl_);
+			topo_drawer_->set_explode_volume(expl_);
+			topo_drawer_->update<Vec3>(map_,vertex_position_);
+			break;
+		case Qt::Key_Minus:
+			expl_ -= 0.05f;
+			volume_drawer_rend_->set_explode_volume(expl_);
+			topo_drawer_->set_explode_volume(expl_);
+			topo_drawer_->update<Vec3>(map_,vertex_position_);
+			break;
+		default:
+			break;
+	}
+	// enable QGLViewer keys
+	QOGLViewer::keyPressEvent(ev);
+	//update drawing
+	update();
+}
+
+void Viewer::mousePressEvent(QMouseEvent* event)
+{
+	if (event->modifiers() & Qt::ShiftModifier)
+	{
+		qoglviewer::Vec P;
+		qoglviewer::Vec Q;
+		rayClick(event, P, Q);
+
+		Vec3 A(P[0], P[1], P[2]);
+		Vec3 B(Q[0], Q[1], Q[2]);
+
+		drawer_->new_list();
+
+		std::vector<Map3::Volume> selected;
+		cgogn::geometry::picking_volumes<Vec3>(map_, vertex_position_, A, B, selected);
+		cgogn_log_info("Viewer") << "Selected volumes: " << selected.size();
+		if (!selected.empty())
+		{
+			drawer_->line_width(2.0);
+			drawer_->begin(GL_LINES);
+			// closest vol in red
+			drawer_->color3f(1.0, 0.0, 0.0);
+			cgogn::rendering::add_volume_to_drawer<Vec3>(map_, selected[0], vertex_position_, drawer_.get());
+			// others in yellow
+			drawer_->color3f(1.0, 1.0, 0.0);
+			for (uint32 i = 1u; i<selected.size(); ++i)
+				cgogn::rendering::add_volume_to_drawer<Vec3>(map_, selected[i], vertex_position_, drawer_.get());
+			drawer_->end();
+		}
+		drawer_->line_width(4.0);
+		drawer_->begin(GL_LINES);
+		drawer_->color3f(1.0, 0.0, 1.0);
+		drawer_->vertex3fv(A);
+		drawer_->vertex3fv(B);
+		drawer_->end();
+
+		drawer_->end_list();
+	}
+
+	QOGLViewer::mousePressEvent(event);
+}
+
+
+void Viewer::draw()
+{
+	QMatrix4x4 proj;
+	QMatrix4x4 view;
+	camera()->getProjectionMatrix(proj);
+	camera()->getModelViewMatrix(view);
+
+	if (vol_rendering_)
+	{
+		glEnable(GL_POLYGON_OFFSET_FILL);
+		glPolygonOffset(1.0f, 1.0f);
+
+		volume_drawer_rend_->draw_faces(proj,view,this);
+
+		glDisable(GL_POLYGON_OFFSET_FILL);
+	}
+
+	if (edge_rendering_)
+		volume_drawer_rend_->draw_edges(proj,view,this);
+
+
+	if (topo_drawering_)
+		topo_drawer_rend_->draw(proj,view,this);
+
+	drawer_rend_->draw(proj, view, this);
+
+}
+
+void Viewer::init()
+{
+	glClearColor(0.1f,0.1f,0.3f,0.0f);
+
+	vbo_pos_ = cgogn::make_unique<cgogn::rendering::VBO>(3);
+	cgogn::rendering::update_vbo(vertex_position_, vbo_pos_.get());
+
+	topo_drawer_ =  cgogn::make_unique<cgogn::rendering::TopoDrawer>();
+	topo_drawer_rend_ = topo_drawer_->generate_renderer();
+	topo_drawer_->set_explode_volume(expl_);
+	topo_drawer_->update<Vec3>(map_,vertex_position_);
+
+	volume_drawer_ = cgogn::make_unique<cgogn::rendering::VolumeDrawer>();
+	volume_drawer_->update_face<Vec3>(map_,vertex_position_);
+	volume_drawer_->update_edge<Vec3>(map_,vertex_position_);
+
+	volume_drawer_rend_ = volume_drawer_->generate_renderer();
+	volume_drawer_rend_->set_explode_volume(expl_);
+
+
+	drawer_ = cgogn::make_unique<cgogn::rendering::DisplayListDrawer>();
+	drawer_rend_ = drawer_->generate_renderer();
+}
+
+int main(int argc, char** argv)
+{
+	std::string volumeMesh;
+	if (argc < 2)
+	{
+		cgogn_log_debug("viewer_topo3") << "USAGE: " << argv[0] << " [filename]";
+		volumeMesh = std::string(DEFAULT_MESH_PATH) + std::string("vtk/nine_hexas.vtu");
+		cgogn_log_debug("viewer_topo3") << "Using default mesh \"" << volumeMesh << "\".";
+	}
+	else
+		volumeMesh = std::string(argv[1]);
+
+	QApplication application(argc, argv);
+	qoglviewer::init_ogl_context();
+
+	// Instantiate the viewer.
+	Viewer viewer;
+	viewer.setWindowTitle("simpleViewer");
+	viewer.import(volumeMesh);
+	viewer.show();
+
+	// Run main loop.
+	return application.exec();
+}
